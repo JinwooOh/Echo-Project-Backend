@@ -1,0 +1,19 @@
+[Unit]
+Description=Music Agent Backend Service
+After=network.target
+
+[Service]
+Type=simple
+User=echo
+Group=echo
+WorkingDirectory=/home/echo/music-agent
+Environment="PATH=/home/echo/music-agent/.venv/bin"
+ExecStart=/home/echo/music-agent/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+# Optional: load .env from project dir
+EnvironmentFile=-/home/echo/music-agent/.env
+
+[Install]
+WantedBy=multi-user.target
