@@ -25,3 +25,6 @@ smoke_test_*.mp3
 # OS
 .DS_Store
 Thumbs.db
+
+# Client (lives in separate repo: Echo-Project-Client)
+client/
