@@ -2,7 +2,7 @@
 
 Production-grade FastAPI backend that accepts transcript text from a Raspberry Pi, generates lyrics and music via MiniMax APIs, stores/serves audio, optionally archives to NAS, and exposes a simple HTTP API with bearer-token auth.
 
-**API Reference:** [docs/API.md](docs/API.md)
+**API Reference:** [docs/API.md](docs/API.md) · **Design notes:** [docs/DESIGN.md](docs/DESIGN.md) · **Test workflow:** [docs/TEST_WORKFLOW.md](docs/TEST_WORKFLOW.md)
 
 ## Requirements
 

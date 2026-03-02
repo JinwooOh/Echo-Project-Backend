@@ -94,14 +94,20 @@ curl -X POST http://localhost:8000/v1/song \
 
 ### GET /v1/song/{job_id}
 
-Get the status of a song generation job. Poll this endpoint until `status` is `done` or `error`.
+Get the status of a song generation job. Supports **long polling** via the `wait` query parameter.
 
 **Request:**
 ```http
-GET /v1/song/550e8400-e29b-41d4-a716-446655440000 HTTP/1.1
+GET /v1/song/550e8400-e29b-41d4-a716-446655440000?wait=60 HTTP/1.1
 Host: localhost:8000
 Authorization: Bearer <token>
 ```
+
+**Query parameters:**
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| wait  | int  | 0       | Max seconds to hold the request (long polling). `0` = return immediately. |
 
 **Response:** `200 OK`
 ```json
@@ -208,10 +214,10 @@ curl -H "Authorization: Bearer your-secret-token" \
 ## Typical Client Flow
 
 1. **Submit job:** `POST /v1/song` with `device_id`, `transcript`, `style`
-2. **Poll status:** `GET /v1/song/{job_id}` every 5–10 seconds
+2. **Wait for completion:** `GET /v1/song/{job_id}?wait=60` (long polling) until `status` is `done` or `error`
 3. **Download audio:** When `status` is `done`, fetch from `audio_url` or `GET /out/{job_id}.mp3`
 
-**Example (bash):**
+**Example (bash, long polling):**
 ```bash
 # 1. Submit
 RESP=$(curl -s -X POST http://localhost:8000/v1/song \
@@ -220,19 +226,19 @@ RESP=$(curl -s -X POST http://localhost:8000/v1/song \
   -d '{"device_id":"pi","transcript":"A witch flying away","style":"K-indie, hopeful"}')
 JOB_ID=$(echo $RESP | jq -r '.job_id')
 
-# 2. Poll until done
+# 2. Long poll until done (re-send if not done after 60s)
 while true; do
-  STATUS=$(curl -s -H "Authorization: Bearer $BEARER_TOKEN" \
-    "http://localhost:8000/v1/song/$JOB_ID" | jq -r '.status')
+  RESULT=$(curl -s -H "Authorization: Bearer $BEARER_TOKEN" \
+    "http://localhost:8000/v1/song/$JOB_ID?wait=60")
+  STATUS=$(echo $RESULT | jq -r '.status')
   echo "Status: $STATUS"
   [ "$STATUS" = "done" ] && break
-  [ "$STATUS" = "error" ] && exit 1
-  sleep 5
+  [ "$STATUS" = "error" ] && echo $RESULT | jq '.error' && exit 1
 done
 
 # 3. Download
-curl -H "Authorization: Bearer $BEARER_TOKEN" \
-  -o song.mp3 "http://localhost:8000/out/$JOB_ID.mp3"
+AUDIO_URL=$(echo $RESULT | jq -r '.audio_url')
+curl -H "Authorization: Bearer $BEARER_TOKEN" -o song.mp3 "$AUDIO_URL"
 ```
 
 ---

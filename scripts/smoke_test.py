@@ -2,7 +2,6 @@
 """Smoke test: submit a job, poll until done, download audio."""
 import os
 import sys
-import time
 
 import httpx
 from dotenv import load_dotenv
@@ -37,10 +36,15 @@ def main() -> int:
     job_id = data["job_id"]
     print(f"Job created: {job_id}")
 
-    # 2. Poll until done or error
+    # 2. Long poll until done or error (wait=60 holds up to 60s per request)
+    print("Long polling for completion...")
     while True:
-        time.sleep(5)
-        r = httpx.get(f"{BASE_URL}/v1/song/{job_id}", headers=HEADERS, timeout=10)
+        r = httpx.get(
+            f"{BASE_URL}/v1/song/{job_id}",
+            params={"wait": 60},
+            headers=HEADERS,
+            timeout=70,
+        )
         r.raise_for_status()
         status_data = r.json()
         status = status_data["status"]
