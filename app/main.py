@@ -1,11 +1,12 @@
 """FastAPI application for Music Agent backend."""
+import asyncio
 import json
 import logging
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -95,29 +96,16 @@ async def post_song(
     )
 
 
-@app.get("/v1/song/{job_id}", response_model=None)
-async def get_song_status(
-    job_id: str,
-    _: None = Depends(verify_bearer),
-):
-    """Get job status."""
-    job = get_job(job_id)
-    if job is None:
-        return JSONResponse(
-            status_code=404,
-            content={"error": "Job not found", "code": "not_found"},
-        )
+def _build_job_status_response(job_id: str, job: dict) -> JobStatus:
+    """Build JobStatus from job dict."""
     status_val = job.get("status", "error")
     lyrics = job.get("lyrics")
     error = job.get("error")
     duration_seconds = job.get("duration_seconds")
-
-    # Build audio_url when done
     audio_url = None
     if status_val == JobStatusEnum.DONE.value and job.get("audio_path"):
         base = get_settings().BASE_URL.rstrip("/")
         audio_url = f"{base}/out/{job_id}.mp3"
-
     return JobStatus(
         job_id=job_id,
         status=JobStatusEnum(status_val),
@@ -126,6 +114,40 @@ async def get_song_status(
         duration_seconds=duration_seconds,
         error=error,
     )
+
+
+@app.get("/v1/song/{job_id}", response_model=None)
+async def get_song_status(
+    job_id: str,
+    wait: int = Query(0, ge=0, le=120, description="Max seconds to hold request (long polling)"),
+    _: None = Depends(verify_bearer),
+):
+    """Get job status. Use ?wait=60 for long polling."""
+    job = get_job(job_id)
+    if job is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": "Job not found", "code": "not_found"},
+        )
+
+    # Long polling: hold until done/error or timeout
+    if wait > 0:
+        check_interval = 1
+        elapsed = 0
+        while elapsed < wait:
+            job = get_job(job_id)
+            if job is None:
+                return JSONResponse(
+                    status_code=404,
+                    content={"error": "Job not found", "code": "not_found"},
+                )
+            status_val = job.get("status", "error")
+            if status_val in (JobStatusEnum.DONE.value, JobStatusEnum.ERROR.value):
+                return _build_job_status_response(job_id, job)
+            await asyncio.sleep(check_interval)
+            elapsed += check_interval
+
+    return _build_job_status_response(job_id, job)
 
 
 @app.get("/out/{filename}", response_model=None)
