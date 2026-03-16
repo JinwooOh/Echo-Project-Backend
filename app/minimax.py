@@ -1,6 +1,7 @@
 """MiniMax Lyrics and Music Generation API client."""
 import json
 import logging
+import asyncio
 from typing import Any
 
 import httpx
@@ -11,7 +12,10 @@ logger = logging.getLogger(__name__)
 
 LYRICS_URL = "https://api.minimax.io/v1/lyrics_generation"
 MUSIC_URL = "https://api.minimax.io/v1/music_generation"
+LYRICS_TIMEOUT = 300.0  # MiniMax lyrics can be slow; 120s was too short
 TIMEOUT = 600.0
+MAX_RETRIES = 2
+RETRY_DELAY = 5.0
 
 
 def _headers() -> dict[str, str]:
@@ -27,10 +31,26 @@ async def generate_lyrics(prompt: str) -> str:
     Returns lyrics string with structure tags.
     """
     payload = {"mode": "write_full_song", "prompt": prompt}
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        r = await client.post(LYRICS_URL, json=payload, headers=_headers())
-        r.raise_for_status()
-        data = r.json()
+    last_err: Exception | None = None
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            async with httpx.AsyncClient(timeout=LYRICS_TIMEOUT) as client:
+                r = await client.post(LYRICS_URL, json=payload, headers=_headers())
+                r.raise_for_status()
+                data = r.json()
+                break
+        except httpx.ReadTimeout as e:
+            last_err = e
+            if attempt < MAX_RETRIES:
+                logger.warning("MiniMax lyrics timeout (attempt %d/%d), retrying in %.0fs", attempt + 1, MAX_RETRIES + 1, RETRY_DELAY)
+                await asyncio.sleep(RETRY_DELAY)
+            else:
+                raise
+        except Exception:
+            raise
+    else:
+        if last_err:
+            raise last_err
 
     for path in [("data", "lyrics"), ("lyrics",), ("data", "text")]:
         cur: Any = data
@@ -66,10 +86,26 @@ async def generate_music(lyrics: str, style_prompt: str) -> dict[str, Any]:
         },
         "output_format": "url",
     }
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        r = await client.post(MUSIC_URL, json=payload, headers=_headers())
-        r.raise_for_status()
-        result = r.json()
+    last_err: Exception | None = None
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+                r = await client.post(MUSIC_URL, json=payload, headers=_headers())
+                r.raise_for_status()
+                result = r.json()
+                break
+        except httpx.ReadTimeout as e:
+            last_err = e
+            if attempt < MAX_RETRIES:
+                logger.warning("MiniMax music timeout (attempt %d/%d), retrying in %.0fs", attempt + 1, MAX_RETRIES + 1, RETRY_DELAY)
+                await asyncio.sleep(RETRY_DELAY)
+            else:
+                raise
+        except Exception:
+            raise
+    else:
+        if last_err:
+            raise last_err
 
     data = (result or {}).get("data")
     if data is None:
