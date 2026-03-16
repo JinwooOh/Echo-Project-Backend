@@ -49,18 +49,23 @@ uvicorn app.main:app --host 100.x.x.x --port 8000
 
 Or use Tailscale as the default route so the service listens on all interfaces.
 
-## Systemd
+## Run 24/7 (survives SSH disconnect)
 
-Install the service:
+Install as a systemd service on your Proxmox VM (or any Linux host):
 
 ```bash
-# Edit music-agent.service: set User, Group, WorkingDirectory, paths
-sudo cp music-agent.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable music-agent
+cd /path/to/Echo-Project-Backend   # or music-agent
+sudo ./install-service.sh
+# Or: sudo ./install-service.sh echo /home/echo/music-agent
+
 sudo systemctl start music-agent
 sudo systemctl status music-agent
 ```
+
+The backend will:
+- Start automatically on VM boot
+- Restart on crash (RestartSec=5)
+- Keep running when you close your Mac SSH session
 
 ## API Endpoints
 
